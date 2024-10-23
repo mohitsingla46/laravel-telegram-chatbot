@@ -2,74 +2,100 @@
 
 namespace App\Http\Controllers;
 
-use Illuminate\Support\Facades\Log;
+use Illuminate\Http\Request;
+use Telegram\Bot\Api;
 use Telegram\Bot\Laravel\Facades\Telegram;
 
 class TelegramBotController extends Controller
 {
-    public function handleWebhook()
+    protected $telegram;
+
+    public function __construct()
     {
-        try {
-            $updates = Telegram::getWebhookUpdates();
+        $this->telegram = new Api(env('TELEGRAM_BOT_TOKEN'));
+    }
 
-            if ($updates->has('message')) {
-                $message = $updates->getMessage();
-                $chatId = $message->getChat()->getId();
-                $text = $message->getText();
+    // Handle Webhook
+    public function handleWebhook(Request $request)
+    {
+        $updates = $request->all();
 
-                // Call the function to send inline keyboard if user sends a specific command
-                if ($text == '/start') {
-                    $this->sendQuestionWithInlineKeyboard($chatId);
-                }
-            } elseif ($updates->has('callback_query')) {
-                // Handle the response from the inline keyboard
-                $callbackQuery = $updates->get('callback_query');
-                $data = $callbackQuery['data'];
-                $chatId = $callbackQuery['message']['chat']['id'];
+        // Check if the message contains text
+        if (isset($updates['message']['text'])) {
+            $chatId = $updates['message']['chat']['id'];
+            $text = $updates['message']['text'];
 
-                // You can now handle responses based on the $data (e.g., user choices)
-                if ($data == 'Pizza') {
-                    Telegram::sendMessage([
-                        'chat_id' => $chatId,
-                        'text' => 'You selected Pizza!'
-                    ]);
-                } else if($data == 'Burger') {
-                    Telegram::sendMessage([
-                        'chat_id' => $chatId,
-                        'text' => 'You selected Burger!'
-                    ]);
-                } else {
-                    Telegram::sendMessage([
-                        'chat_id' => $chatId,
-                        'text' => 'Invalid Option!'
-                    ]);
-                }
+            // Call functions based on user input
+            if ($text == '/start') {
+                $this->sendStartMessage($chatId);
+            } else if ($text == 'Start') {
+                $this->sendQuestion($chatId);
+            } else {
+                $this->telegram->sendMessage([
+                    'chat_id' => $chatId,
+                    'text' => 'Invalid Input!'
+                ]);
             }
-        } catch (\Exception $e) {
-            Log::error($e->getMessage());
+        } elseif (isset($updates['callback_query'])) {
+            $this->handleCallbackQuery($updates['callback_query']);
         }
 
         return response('OK', 200);
     }
 
-    function sendQuestionWithInlineKeyboard($chatId)
+    // Send start message with custom keyboard
+    protected function sendStartMessage($chatId)
     {
-        // Define the inline keyboard
-        $replyMarkup = json_encode([
+        $keyboard = json_encode([
+            'keyboard' => [
+                [['text' => 'Start']],
+            ],
+            'resize_keyboard' => true,
+            'one_time_keyboard' => true
+        ]);
+
+        $this->telegram->sendMessage([
+            'chat_id' => $chatId,
+            'text' => 'Please press Start to begin.',
+            'reply_markup' => $keyboard
+        ]);
+    }
+
+    protected function sendQuestion($chatId)
+    {
+        $inlineKeyboard = json_encode([
             'inline_keyboard' => [
                 [
-                    ['text' => 'Pizza', 'callback_data' => 'Pizza'],
-                    ['text' => 'Burger', 'callback_data' => 'Burger']
+                    ['text' => 'Engineering', 'callback_data' => 'engineering'],
+                    ['text' => 'Medical', 'callback_data' => 'medical']
                 ]
             ]
         ]);
 
-        // Send the message with the inline keyboard
-        Telegram::sendMessage([
+        $this->telegram->sendMessage([
             'chat_id' => $chatId,
-            'text' => 'Please choose an option:',
-            'reply_markup' => $replyMarkup
+            'text' => 'Please select your field of interest:',
+            'reply_markup' => $inlineKeyboard
         ]);
+    }
+
+    // Handle user responses (callback queries)
+    protected function handleCallbackQuery($callbackQuery)
+    {
+        $chatId = $callbackQuery['message']['chat']['id'];
+        $data = $callbackQuery['data'];
+
+        if ($data == 'engineering') {
+            $this->telegram->sendMessage([
+                'chat_id' => $chatId,
+                'text' => 'You chose Engineering!'
+            ]);
+        } elseif ($data == 'medical') {
+            $this->telegram->sendMessage([
+                'chat_id' => $chatId,
+                'text' => 'You chose Medical!'
+            ]);
+        }
     }
 
     public function setWebhook()
