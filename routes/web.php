@@ -7,6 +7,8 @@ Route::get('/', function () {
     return view('welcome');
 });
 
+Route::get('/set-webhook', [TelegramBotController::class, 'setWebhook']);
+
 Route::post('/telegram/webhook', [TelegramBotController::class, 'handleWebhook']);
 
-Route::get('/set-webhook', [TelegramBotController::class, 'setWebhook']);
+Route::get('test', [TelegramBotController::class, 'test']);

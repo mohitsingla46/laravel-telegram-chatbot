@@ -3,99 +3,23 @@
 namespace App\Http\Controllers;
 
 use Illuminate\Http\Request;
+use Illuminate\Support\Facades\Log;
 use Telegram\Bot\Api;
 use Telegram\Bot\Laravel\Facades\Telegram;
 
 class TelegramBotController extends Controller
 {
     protected $telegram;
+    protected $questions = [
+        'askName' => 'What is your name?',
+        'askEmail' => 'What is your e-mail?',
+        'askFieldOfInterest' => 'What is your field of interest?',
+        'askWorkEnvironment' => 'What is your preferred work environment?',
+    ];
 
     public function __construct()
     {
         $this->telegram = new Api(env('TELEGRAM_BOT_TOKEN'));
-    }
-
-    // Handle Webhook
-    public function handleWebhook(Request $request)
-    {
-        $updates = $request->all();
-
-        // Check if the message contains text
-        if (isset($updates['message']['text'])) {
-            $chatId = $updates['message']['chat']['id'];
-            $text = $updates['message']['text'];
-
-            // Call functions based on user input
-            if ($text == '/start') {
-                $this->sendStartMessage($chatId);
-            } else if ($text == 'Start') {
-                $this->sendQuestion($chatId);
-            } else {
-                $this->telegram->sendMessage([
-                    'chat_id' => $chatId,
-                    'text' => 'Invalid Input!'
-                ]);
-            }
-        } elseif (isset($updates['callback_query'])) {
-            $this->handleCallbackQuery($updates['callback_query']);
-        }
-
-        return response('OK', 200);
-    }
-
-    // Send start message with custom keyboard
-    protected function sendStartMessage($chatId)
-    {
-        $keyboard = json_encode([
-            'keyboard' => [
-                [['text' => 'Start']],
-            ],
-            'resize_keyboard' => true,
-            'one_time_keyboard' => true
-        ]);
-
-        $this->telegram->sendMessage([
-            'chat_id' => $chatId,
-            'text' => 'Please press Start to begin.',
-            'reply_markup' => $keyboard
-        ]);
-    }
-
-    protected function sendQuestion($chatId)
-    {
-        $inlineKeyboard = json_encode([
-            'inline_keyboard' => [
-                [
-                    ['text' => 'Engineering', 'callback_data' => 'engineering'],
-                    ['text' => 'Medical', 'callback_data' => 'medical']
-                ]
-            ]
-        ]);
-
-        $this->telegram->sendMessage([
-            'chat_id' => $chatId,
-            'text' => 'Please select your field of interest:',
-            'reply_markup' => $inlineKeyboard
-        ]);
-    }
-
-    // Handle user responses (callback queries)
-    protected function handleCallbackQuery($callbackQuery)
-    {
-        $chatId = $callbackQuery['message']['chat']['id'];
-        $data = $callbackQuery['data'];
-
-        if ($data == 'engineering') {
-            $this->telegram->sendMessage([
-                'chat_id' => $chatId,
-                'text' => 'You chose Engineering!'
-            ]);
-        } elseif ($data == 'medical') {
-            $this->telegram->sendMessage([
-                'chat_id' => $chatId,
-                'text' => 'You chose Medical!'
-            ]);
-        }
     }
 
     public function setWebhook()
@@ -105,5 +29,51 @@ class TelegramBotController extends Controller
         $url = $baseUrl . '/telegram/webhook';
         $response = Telegram::setWebhook(['url' => $url]);
         return $response;
+    }
+
+    public function handleWebhook(Request $request)
+    {
+        $chatId = $request->input('message.chat.id');
+        $text = $request->input('message.text');
+        Log::info($request->session()->get('step'));
+        $step = $request->session()->get('step', 'start');
+
+        switch ($step) {
+            case 'start':
+                $request->session()->put('step', 'asking_name');
+                $this->askName($chatId);
+                break;
+
+            case 'asking_name':
+                $request->session()->put('step', 'asking_email');
+                $this->askEmail($chatId);
+                break;
+        }
+    }
+
+    // Function to ask user's name
+    protected function askName($chatId)
+    {
+        $this->telegram->sendMessage([
+            'chat_id' => $chatId,
+            'text' => $this->questions['askName']
+        ]);
+    }
+
+    // Function to ask user's e-mail
+    protected function askEmail($chatId)
+    {
+        $this->telegram->sendMessage([
+            'chat_id' => $chatId,
+            'text' => $this->questions['askEmail']
+        ]);
+    }
+
+    public function test(Request $request)
+    {
+        // $request->session()->put('mykey', 'demo');
+
+        $value = $request->session()->get('mykey', 'fgsgg');
+        print_r($value);
     }
 }
